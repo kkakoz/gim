@@ -7,6 +7,7 @@ import (
 )
 
 type Server interface {
+	ServiceRegistration
 	SetAcceptor(Acceptor)
 	SetMessageListener(MessageListener)
 	SetStateListener(StateListener)

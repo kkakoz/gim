@@ -6,8 +6,7 @@ import (
 )
 
 type Client interface {
-	ID() string
-	Name() string
+	Service
 	Connect(string) error
 	SetDialer(Dialer)
 	Send([]byte) error

@@ -3,6 +3,7 @@ package tcp
 import (
 	"github.com/kkakoz/gim"
 	"github.com/kkakoz/gim/pkg/endian"
+	"io"
 	"net"
 )
 
@@ -29,14 +30,21 @@ func (c *TcpConn) ReadFrame() (gim.Frame, error) {
 }
 
 func (c *TcpConn) WriteFrame(code gim.OpCode, payload []byte) error {
-	err := endian.WriteUint8(c.Conn, uint8(code))
-	if err != nil {
-		return err
-	}
-	return endian.WriteShortBytes(c.Conn, payload)
+	return WriteFrame(c.Conn, code, payload)
 }
 
 func (c *TcpConn) Flush() error {
+	return nil
+}
+
+// WriteFrame write a frame to w
+func WriteFrame(w io.Writer, code gim.OpCode, payload []byte) error {
+	if err := endian.WriteUint8(w, uint8(code)); err != nil {
+		return err
+	}
+	if err := endian.WriteBytes(w, payload); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -6,7 +6,6 @@ import (
 	"github.com/kkakoz/gim"
 	"github.com/kkakoz/gim/pkg/gox"
 	"github.com/kkakoz/gim/pkg/logger"
-	"github.com/kkakoz/gim/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
@@ -23,7 +22,7 @@ type Server struct {
 	gim.StateListener
 	conn    gim.Conn
 	once    sync.Once
-	options *websocket.ServerOptions
+	options *gim.ServerOptions
 }
 
 func (s *Server) SetAcceptor(acceptor gim.Acceptor) {
@@ -48,7 +47,7 @@ func (s *Server) SetChannelMap(channelMap gim.IChannelMap) {
 
 func (s *Server) Start() error {
 	log := logger.WithFields(zap.String("module", "tcp.server"), zap.String("listen", s.listen), zap.String("id", s.ServiceID()))
-	listen, err := net.Listen("tpc", s.listen)
+	listen, err := net.Listen("tcp", s.listen)
 	if err != nil {
 		return err
 	}
@@ -59,33 +58,31 @@ func (s *Server) Start() error {
 		if err != nil {
 			log.Error("accept conn err:" + err.Error())
 		}
-		tcpConn := NewConn(conn)
-		id, err := s.Acceptor.Accept(s.conn, s.options.LoginWait)
-		if err != nil {
-			return errors.New("acceptor err:" + err.Error())
-		}
-
-		if err != nil {
-			_ = tcpConn.WriteFrame(gim.OpClose, []byte(err.Error()))
-			conn.Close()
-			continue
-		}
-		if _, ok := s.Get(id); ok {
-			log.Warn(fmt.Sprintf("channel %s existed", id))
-			_ = tcpConn.WriteFrame(gim.OpClose, []byte("channelId is repeated"))
-			conn.Close()
-			continue
-		}
-		// step 4
-		channel := gim.NewChannel(id, tcpConn)
-		channel.SetWriteWait(s.options.WriteWait)
-		channel.SetReadWait(s.options.ReadWait)
-		s.Add(channel)
-
 		gox.Go(func() {
-			err := channel.ReadLoop(s.MessageListener)
+			s.conn = NewConn(conn)
+			id, err := s.Accept(s.conn, s.options.LoginWait)
 			if err != nil {
-				log.Info(err.Error())
+				logger.Error("acceptor err:" + err.Error())
+			}
+
+			if err != nil {
+				_ = s.conn.WriteFrame(gim.OpClose, []byte(err.Error()))
+				conn.Close()
+			}
+			if _, ok := s.Get(id); ok {
+				log.Warn(fmt.Sprintf("channel %s existed", id))
+				_ = s.conn.WriteFrame(gim.OpClose, []byte("channelId is repeated"))
+				conn.Close()
+			}
+			// step 4
+			channel := gim.NewChannel(id, s.conn)
+			channel.SetWriteWait(s.options.WriteWait)
+			channel.SetReadWait(s.options.ReadWait)
+			s.Add(channel)
+
+			err = channel.ReadLoop(s.MessageListener)
+			if err != nil {
+				log.Info("read loop err:" + err.Error())
 			}
 			// step 6
 			s.Remove(channel.ID())
@@ -95,6 +92,7 @@ func (s *Server) Start() error {
 			}
 			channel.Close()
 		})
+
 	}
 
 }
@@ -109,4 +107,16 @@ func (s *Server) Push(id string, data []byte) error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
+}
+
+func NewServer(listen string, service gim.ServiceRegistration, optsfunc ...gim.ServerOptionsFunc) gim.Server {
+	serverOption := gim.NewServerOption()
+	for _, opt := range optsfunc {
+		opt(serverOption)
+	}
+	return &Server{
+		listen:              listen,
+		ServiceRegistration: service,
+		options:             serverOption,
+	}
 }

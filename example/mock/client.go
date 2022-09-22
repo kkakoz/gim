@@ -7,6 +7,7 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/kkakoz/gim"
 	"github.com/kkakoz/gim/pkg/logger"
+	"github.com/kkakoz/gim/tcp"
 	"github.com/kkakoz/gim/websocket"
 	"net"
 	"time"
@@ -37,19 +38,41 @@ func (w *WebsocketDialer) DialAndHandshake(ctx gim.DialerContext) (net.Conn, err
 	return conn, nil
 }
 
+type TCPDialer struct {
+}
+
+func (w *TCPDialer) DialAndHandshake(ctx gim.DialerContext) (net.Conn, error) {
+	logger.Info("start ws dial: " + ctx.Address)
+	//// 1 调用ws.Dial拨号
+	//ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), ctx.Timeout)
+	//defer cancel()
+
+	conn, err := net.Dial("tcp", ctx.Address)
+	if err != nil {
+		return nil, err
+	}
+	// 2. 发送用户认证信息，示例就是userid
+	err = tcp.WriteFrame(conn, gim.OpBinary, []byte(ctx.Id))
+	if err != nil {
+		return nil, err
+	}
+	// 3. return conn
+	return conn, nil
+}
+
 //入口方法
 func (c *ClientDemo) Start(userID, protocol, addr string) {
 	var cli gim.Client
 
 	// step1: 初始化客户端
 	if protocol == "ws" {
-		cli = websocket.NewClient(userID, "client", websocket.WithClientHeartbeat(time.Second*30))
+		cli = websocket.NewClient(userID, "client", gim.WithClientHeartbeat(time.Second*30))
 		// set dialer
 		cli.SetDialer(&WebsocketDialer{})
-	} /*else if protocol == "tcp" {
-		cli = tcp.NewClient("test1", "client", tcp.ClientOptions{})
+	} else if protocol == "tcp" {
+		cli = tcp.NewClient(userID, "client", gim.WithClientHeartbeat(time.Second*5))
 		cli.SetDialer(&TCPDialer{})
-	}*/
+	}
 
 	// step2: 建立连接
 
@@ -66,6 +89,7 @@ func (c *ClientDemo) Start(userID, protocol, addr string) {
 				logger.Error(err.Error())
 				return
 			}
+			fmt.Println("send message hello")
 			time.Sleep(time.Second)
 		}
 	}()
@@ -75,14 +99,14 @@ func (c *ClientDemo) Start(userID, protocol, addr string) {
 	for {
 		frame, err := cli.Read()
 		if err != nil {
-			logger.Error(err.Error())
+			logger.Error("cli read err:" + err.Error())
 			break
 		}
 		if frame.GetOpCode() != gim.OpBinary {
 			continue
 		}
 		recv++
-		logger.Warn(fmt.Sprintf("%s receive message [%s]", cli.ID(), frame.GetPayload()))
+		logger.Warn(fmt.Sprintf("%s receive message [%s]", cli.ServiceID(), frame.GetPayload()))
 		if recv == count { // 接收完消息
 			break
 		}

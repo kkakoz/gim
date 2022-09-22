@@ -14,37 +14,8 @@ import (
 	"time"
 )
 
-type ServerOptions struct {
-	LoginWait time.Duration
-	ReadWait  time.Duration
-	WriteWait time.Duration
-}
-
-func newServerOption() *ServerOptions {
-	return &ServerOptions{
-		LoginWait: gim.DefaultLoginWait,
-		ReadWait:  gim.DefaultReadWait,
-		WriteWait: gim.DefaultReadWait,
-	}
-}
-
-type serverOptionsFunc func(options *ServerOptions)
-
-func WithServerLoginWait(duration time.Duration) serverOptionsFunc {
-	return func(options *ServerOptions) {
-		options.LoginWait = duration
-	}
-}
-
-func WithServerRWWait(duration time.Duration) serverOptionsFunc {
-	return func(options *ServerOptions) {
-		options.ReadWait = duration
-		options.WriteWait = duration
-	}
-}
-
-// DefaultServer is a websocket implement of the Server
-type DefaultServer struct {
+// Server is a websocket implement of the Server
+type Server struct {
 	listen string
 	gim.ServiceRegistration
 	gim.IChannelMap
@@ -52,30 +23,30 @@ type DefaultServer struct {
 	gim.MessageListener
 	gim.StateListener
 	once    sync.Once
-	options *ServerOptions
+	options *gim.ServerOptions
 }
 
-func (s *DefaultServer) SetAcceptor(acceptor gim.Acceptor) {
+func (s *Server) SetAcceptor(acceptor gim.Acceptor) {
 	s.Acceptor = acceptor
 }
 
-func (s *DefaultServer) SetMessageListener(listener gim.MessageListener) {
+func (s *Server) SetMessageListener(listener gim.MessageListener) {
 	s.MessageListener = listener
 }
 
-func (s *DefaultServer) SetStateListener(listener gim.StateListener) {
+func (s *Server) SetStateListener(listener gim.StateListener) {
 	s.StateListener = listener
 }
 
-func (s *DefaultServer) SetReadWait(duration time.Duration) {
+func (s *Server) SetReadWait(duration time.Duration) {
 	s.options.ReadWait = duration
 }
 
-func (s *DefaultServer) SetChannelMap(channelMap gim.IChannelMap) {
+func (s *Server) SetChannelMap(channelMap gim.IChannelMap) {
 	s.IChannelMap = channelMap
 }
 
-func (s *DefaultServer) Push(id string, data []byte) error {
+func (s *Server) Push(id string, data []byte) error {
 	ch, ok := s.IChannelMap.Get(id)
 	if !ok {
 		return errors.New("channel no found")
@@ -83,16 +54,16 @@ func (s *DefaultServer) Push(id string, data []byte) error {
 	return ch.Push(data)
 }
 
-func (s *DefaultServer) Shutdown(ctx context.Context) error {
+func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func NewDefaultServer(listen string, service gim.ServiceRegistration, optsfunc ...serverOptionsFunc) gim.Server {
-	serverOption := newServerOption()
+func NewServer(listen string, service gim.ServiceRegistration, optsfunc ...gim.ServerOptionsFunc) gim.Server {
+	serverOption := gim.NewServerOption()
 	for _, opt := range optsfunc {
 		opt(serverOption)
 	}
-	return &DefaultServer{
+	return &Server{
 		listen:              listen,
 		ServiceRegistration: service,
 		options:             serverOption,
@@ -100,7 +71,7 @@ func NewDefaultServer(listen string, service gim.ServiceRegistration, optsfunc .
 }
 
 // Start server
-func (s *DefaultServer) Start() error {
+func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	log := logger.WithFields(zap.String("module", "ws.server"), zap.String("listen", s.listen), zap.String("id", s.ServiceID()))
 	if s.Acceptor == nil {
@@ -150,7 +121,7 @@ func (s *DefaultServer) Start() error {
 		gox.Go(func() {
 			err := channel.ReadLoop(s.MessageListener)
 			if err != nil {
-				log.Info(err.Error())
+				log.Info("read loop err:" + err.Error())
 			}
 			// step 6
 			s.Remove(channel.ID())

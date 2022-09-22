@@ -2,7 +2,7 @@ package gox
 
 import (
 	"fmt"
-	"log"
+	"github.com/kkakoz/gim/pkg/logger"
 	"runtime"
 )
 
@@ -19,7 +19,7 @@ func Go(f func()) {
 				buf := make([]byte, 64<<10)
 				buf = buf[:runtime.Stack(buf, false)]
 				err = fmt.Errorf("goroutine: panic recovered: %s\n%s", err, buf)
-				log.Println(fmt.Sprintf("goroutine: panic recovered: %s\n%s", err, buf))
+				logger.Error(fmt.Sprintf("goroutine: panic recovered: %s\n%s", err, buf))
 			}
 		}()
 		f()

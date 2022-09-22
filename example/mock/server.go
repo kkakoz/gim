@@ -5,6 +5,7 @@ import (
 	"github.com/kkakoz/gim"
 	"github.com/kkakoz/gim/naming"
 	"github.com/kkakoz/gim/pkg/logger"
+	"github.com/kkakoz/gim/tcp"
 	"github.com/kkakoz/gim/websocket"
 	"github.com/pkg/errors"
 	"time"
@@ -21,10 +22,10 @@ func (s *ServerDemo) Start(id, protocol, addr string) {
 	}
 	// 忽略NewServer的内部逻辑，你可以认为它是一个空的方法，或者一个mock对象。
 	if protocol == "ws" {
-		srv = websocket.NewDefaultServer(addr, service)
-	} /*else if protocol == "tcp" {
+		srv = websocket.NewServer(addr, service)
+	} else if protocol == "tcp" {
 		srv = tcp.NewServer(addr, service)
-	}*/
+	}
 
 	handler := &ServerHandler{}
 

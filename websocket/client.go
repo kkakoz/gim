@@ -5,6 +5,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/kkakoz/gim"
+	"github.com/kkakoz/gim/pkg/gox"
 	"github.com/kkakoz/gim/pkg/logger"
 	"github.com/pkg/errors"
 	"net"
@@ -13,24 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-type clientOptions struct {
-	heartbeat time.Duration
-	readWait  time.Duration
-	writeWait time.Duration
-}
-
-func newClientOptions() *clientOptions {
-	return &clientOptions{heartbeat: time.Second, readWait: time.Second, writeWait: time.Second}
-}
-
-type clientOptionFunc func(*clientOptions)
-
-func WithClientHeartbeat(duration time.Duration) clientOptionFunc {
-	return func(options *clientOptions) {
-		options.heartbeat = duration
-	}
-}
 
 type client struct {
 	sync.Mutex
@@ -42,15 +25,19 @@ type client struct {
 
 	conn net.Conn
 	gim.Dialer
-	options *clientOptions
+	options *gim.ClientOptions
 }
 
-func (c *client) ID() string {
+func (c *client) ServiceID() string {
 	return c.id
 }
 
-func (c *client) Name() string {
+func (c *client) ServiceName() string {
 	return c.name
+}
+
+func (c *client) GetMeta() map[string]string {
+	return map[string]string{}
 }
 
 func (c *client) Connect(addr string) error {
@@ -65,7 +52,7 @@ func (c *client) Connect(addr string) error {
 		Id:      c.id,
 		Name:    c.name,
 		Address: addr,
-		Timeout: c.options.heartbeat,
+		Timeout: c.options.Heartbeat,
 	})
 	if err != nil {
 		atomic.CompareAndSwapInt32(&c.state, 1, 0)
@@ -76,13 +63,13 @@ func (c *client) Connect(addr string) error {
 	}
 	c.conn = conn
 
-	if c.options.heartbeat > 0 {
-		go func() {
+	if c.options.Heartbeat > 0 {
+		gox.Go(func() {
 			err := c.heartbeatLoop(c.conn)
 			if err != nil {
 				logger.Error("heartbealoop stopped: " + err.Error())
 			}
-		}()
+		})
 	}
 	return nil
 }
@@ -97,7 +84,7 @@ func (c *client) Send(payload []byte) error {
 	}
 	c.Lock()
 	defer c.Unlock()
-	err := c.conn.SetWriteDeadline(time.Now().Add(c.options.writeWait))
+	err := c.conn.SetWriteDeadline(time.Now().Add(c.options.WriteWait))
 	if err != nil {
 		return err
 	}
@@ -109,8 +96,8 @@ func (c *client) Read() (gim.Frame, error) {
 	if c.conn == nil {
 		return nil, errors.New("connection is nil")
 	}
-	if c.options.readWait > 0 {
-		_ = c.conn.SetReadDeadline(time.Now().Add(c.options.readWait))
+	if c.options.ReadWait > 0 {
+		_ = c.conn.SetReadDeadline(time.Now().Add(c.options.ReadWait))
 	}
 	frame, err := ws.ReadFrame(c.conn)
 	if err != nil {
@@ -141,7 +128,7 @@ func (c *client) heartbeatLoop(conn net.Conn) error {
 func (c *client) ping(conn net.Conn) error {
 	c.Lock()
 	defer c.Unlock()
-	err := conn.SetWriteDeadline(time.Now().Add(c.options.writeWait))
+	err := conn.SetWriteDeadline(time.Now().Add(c.options.WriteWait))
 	if err != nil {
 		return err
 	}
@@ -149,8 +136,8 @@ func (c *client) ping(conn net.Conn) error {
 	return wsutil.WriteClientMessage(conn, ws.OpPing, nil)
 }
 
-func NewClient(id string, name string, options ...clientOptionFunc) *client {
-	clientOpts := newClientOptions()
+func NewClient(id string, name string, options ...gim.ClientOptionFunc) *client {
+	clientOpts := gim.NewClientOptions()
 	for _, opt := range options {
 		opt(clientOpts)
 	}

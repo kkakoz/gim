@@ -13,24 +13,6 @@ import (
 	"time"
 )
 
-type clientOptions struct {
-	heartbeat time.Duration
-	readWait  time.Duration
-	writeWait time.Duration
-}
-
-func newClientOptions() *clientOptions {
-	return &clientOptions{heartbeat: time.Second, readWait: time.Second, writeWait: time.Second}
-}
-
-type clientOptionFunc func(*clientOptions)
-
-func WithClientHeartbeat(duration time.Duration) clientOptionFunc {
-	return func(options *clientOptions) {
-		options.heartbeat = duration
-	}
-}
-
 type client struct {
 	sync.Mutex
 	once    sync.Once
@@ -41,14 +23,18 @@ type client struct {
 
 	conn gim.Conn
 	gim.Dialer
-	options *clientOptions
+	options *gim.ClientOptions
 }
 
-func (c *client) ID() string {
+func (c *client) GetMeta() map[string]string {
+	return map[string]string{}
+}
+
+func (c *client) ServiceID() string {
 	return c.id
 }
 
-func (c *client) Name() string {
+func (c *client) ServiceName() string {
 	return c.name
 }
 
@@ -75,7 +61,7 @@ func (c *client) Connect(addr string) error {
 	}
 	c.conn = NewConn(conn)
 
-	if c.options.heartbeat > 0 {
+	if c.options.Heartbeat > 0 {
 		go func() {
 			err := c.heartbeatLoop(c.conn)
 			if err != nil {
@@ -98,8 +84,8 @@ func (c *client) Read() (gim.Frame, error) {
 	if c.conn == nil {
 		return nil, errors.New("connection is nil")
 	}
-	if c.options.heartbeat > 0 {
-		_ = c.conn.SetReadDeadline(time.Now().Add(c.options.readWait))
+	if c.options.ReadWait > 0 {
+		_ = c.conn.SetReadDeadline(time.Now().Add(c.options.ReadWait))
 	}
 	frame, err := c.conn.ReadFrame()
 	if err != nil {
@@ -128,7 +114,7 @@ func (c *client) heartbeatLoop(conn gim.Conn) error {
 func (c *client) ping(conn gim.Conn) error {
 	c.Lock()
 	defer c.Unlock()
-	err := conn.SetWriteDeadline(time.Now().Add(c.options.writeWait))
+	err := conn.SetWriteDeadline(time.Now().Add(c.options.WriteWait))
 	if err != nil {
 		return err
 	}
@@ -136,8 +122,8 @@ func (c *client) ping(conn gim.Conn) error {
 	return wsutil.WriteClientMessage(conn, ws.OpPing, nil)
 }
 
-func NewClient(id string, name string, options ...clientOptionFunc) *client {
-	clientOpts := newClientOptions()
+func NewClient(id string, name string, options ...gim.ClientOptionFunc) *client {
+	clientOpts := gim.NewClientOptions()
 	for _, opt := range options {
 		opt(clientOpts)
 	}
