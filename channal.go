@@ -76,14 +76,14 @@ func NewChannel(id string, conn Conn, options ...channelOptionFunc) IChannel {
 
 func (ch *Channel) writeLoop() error {
 	for payload := range ch.writechan {
-		err := ch.WriteFrame(OpBinary, payload)
+		err := ch.WriteFrame(OpText, payload)
 		if err != nil {
 			return errors.New(fmt.Sprintf("wirte %s frame err:%s", string(payload), err.Error()))
 		}
 		chanlen := len(ch.writechan)
 		for i := 0; i < chanlen; i++ {
 			payload = <-ch.writechan
-			err := ch.WriteFrame(OpBinary, payload)
+			err := ch.WriteFrame(OpText, payload)
 			if err != nil {
 				return errors.New(fmt.Sprintf("wirte %s frame err:%s", string(payload), err.Error()))
 			}
