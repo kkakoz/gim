@@ -21,7 +21,7 @@ func (m *SyncMap[K, V]) Add(k K, v V) {
 }
 
 func (m *SyncMap[K, V]) Get(k K) (V, bool) {
-	m.lock.RUnlock()
+	m.lock.RLock()
 	defer m.lock.RUnlock()
 	v, ok := m.m[k]
 	return v, ok
@@ -40,7 +40,7 @@ func (m *SyncMap[K, V]) Len() int {
 }
 
 func (m *SyncMap[K, V]) Values() []V {
-	m.lock.RUnlock()
+	m.lock.Lock()
 	defer m.lock.RUnlock()
 	res := make([]V, 0, len(m.m))
 	for _, v := range m.m {

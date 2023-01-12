@@ -8,8 +8,11 @@ import (
 	"github.com/kkakoz/gim/pkg/logger"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"os"
+	"os/signal"
 	"sync"
 	"sync/atomic"
+	"syscall"
 )
 
 const (
@@ -85,11 +88,30 @@ func Start() error {
 		}(c.Srv)
 	})
 
+	// 连接需要的服务
 	for _, service := range c.deps {
 		gox.Go(func() {
 			connectToService(service)
 		})
 	}
+
+	// 服务注册
+	if c.Srv.PublicAddress() != "" && c.Srv.PublicPort() != 0 {
+		err := c.Naming.Register(c.Srv)
+		if err != nil {
+			logger.Error(err.Error())
+		}
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	logger.Info(fmt.Sprintf("shutdown %s", <-c))
+
+	return shutdown()
+}
+
+func shutdown() error {
 	return nil
 }
 
